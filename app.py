@@ -69,7 +69,7 @@ st.markdown('''
 </header>
 ''', unsafe_allow_html=True)
 
-with st.expander(f'첨부파일 관리 · {len(st.session_state.attachments)}/{MAX_UPLOADS}', expanded=False):
+with st.expander('첨부파일 관리', expanded=False):
     uploads = st.file_uploader(
         '문서 또는 이미지 첨부 (한 번에 여러 개 선택 가능)',
         type=sorted(ext.lstrip('.') for ext in ALLOWED_TYPES),
@@ -86,6 +86,7 @@ with st.expander(f'첨부파일 관리 · {len(st.session_state.attachments)}/{M
         if len(uploads) > MAX_UPLOADS:
             st.warning('한 번에 최대 8개까지만 보관됩니다.')
 
+    st.caption(f'선택된 파일: {len(st.session_state.attachments)}/{MAX_UPLOADS}')
     for attachment_id, item in list(st.session_state.attachments.items()):
         left, right = st.columns([5, 1], vertical_alignment='center')
         with left:
@@ -113,7 +114,7 @@ if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
 for msg in st.session_state.chat_history:
-    with st.chat_message(msg['role']):
+    with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else None):
         render_assistant_markdown(msg['content'])
 
 message = st.chat_input('질문을 입력하세요 · 첨부파일은 위의 첨부파일 관리에서 선택하세요')

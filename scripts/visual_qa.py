@@ -33,6 +33,7 @@ def main():
             page.wait_for_timeout(500)
             dims=page.evaluate('''() => ({vw:window.innerWidth, doc:document.documentElement.scrollWidth,
                 body:document.body.scrollWidth, visibleTitle:document.querySelector('h1').getBoundingClientRect().top>=0})''')
+            assert page.get_by_text('Deploy',exact=True).count()==0,'Developer Deploy button visible'
             screenshot=dest/f'{width}x{height}.png'
             page.screenshot(path=str(screenshot),full_page=True)
             has_horizontal=dims['doc'] > dims['vw']+1
@@ -46,6 +47,20 @@ def main():
                 input_el=page.locator('[data-testid="stChatInput"]').first
                 input_el.wait_for(state='visible',timeout=10000)
                 assert input_el.bounding_box()['y'] < height,'chat input is below viewport'
+                if width==1280:
+                    page.get_by_text('첨부파일 관리',exact=True).first.click()
+                    uploader=page.locator('[data-testid="stFileUploader"] input[type="file"]').first
+                    uploader.set_input_files([
+                        {'name':'qa_alpha.txt','mimeType':'text/plain','buffer':b'alpha'},
+                        {'name':'qa_beta.txt','mimeType':'text/plain','buffer':b'beta'},
+                    ])
+                    page.get_by_text('qa_alpha.txt',exact=False).first.wait_for(state='visible',timeout=15000)
+                    page.get_by_text('qa_beta.txt',exact=False).first.wait_for(state='visible',timeout=15000)
+                chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
+                chat_editor.fill('UI 회귀 테스트 메시지')
+                chat_editor.press('Enter')
+                page.get_by_text('UI 회귀 테스트 메시지',exact=False).first.wait_for(state='visible',timeout=15000)
+                page.screenshot(path=str(dest/f'{width}x{height}_interactions.png'),full_page=True)
             report.append({'viewport':f'{width}x{height}','horizontal_overflow':has_horizontal,
                            'title_visible':dims['visibleTitle'],'screenshot':str(screenshot)})
             assert not has_horizontal,f'Full-page horizontal scroll at {width}: {dims}'

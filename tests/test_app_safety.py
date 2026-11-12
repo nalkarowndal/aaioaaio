@@ -34,3 +34,13 @@ def test_mobile_css_and_markdown_overflow():
     assert '@media (max-width:420px)' in css
     assert 'overflow-x:auto' in css
     assert '[data-testid="stChatMessage"]' in css
+
+
+def test_production_toolbar_does_not_show_deploy_control():
+    config=(APP.parent / '.streamlit' / 'config.toml').read_text(encoding='utf-8')
+    assert 'toolbarMode = "minimal"' in config
+
+
+def test_assistant_avatar_uses_brand_material_icon():
+    source=APP.read_text(encoding='utf-8')
+    assert ':material/auto_awesome:' in source

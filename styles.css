@@ -94,3 +94,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {outline:2px s
 @media (min-width:769px) {
   [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { max-width:85%;margin-left:auto; }
 }
+
+/* Brand-consistent material avatar rather than Streamlit's default orange bot. */
+[data-testid="stChatMessageAvatarAssistant"] { background:rgba(99,102,241,.24) !important;color:#c7d2fe !important;border:1px solid rgba(129,140,248,.35);border-radius:12px; }
