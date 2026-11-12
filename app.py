@@ -285,6 +285,8 @@ message = ''
 if submission is not None:
     message = (submission.text or '').strip()
     submitted_files = [(file.name, file.getvalue()) for file in submission.files]
+    if os.getenv('AI_STUDIO_QA_DEBUG') == '1':
+        print(f"[QA_DEBUG] composer submitted: text_len={len(message)}, files={len(submitted_files)}, session_attachments={len(st.session_state.attachments)}", flush=True)
     if submitted_files:
         # Each composer submission is a deliberate new attachment action.
         # Blocked IDs only protect the old uploader snapshot, not re-selection.
@@ -320,6 +322,8 @@ if message or pending_generate or pending_regenerate is not None:
             for item in attachments_for_request
         ]
         display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
+        if os.getenv('AI_STUDIO_QA_DEBUG') == '1':
+            print(f"[QA_DEBUG] message attached count: {len(attached)}, attachments_in_state: {len(st.session_state.attachments)}", flush=True)
         history.append({'role': 'user', 'content': display_text})
         persist_chat()  # A sent question is never lost if streaming subsequently fails.
         history_before = history[:-1]

@@ -32,6 +32,7 @@ jobs:
         env:
           AI_STUDIO_SINGLE_USER_HISTORY: "1"
           AI_STUDIO_HISTORY_DB: "/tmp/ai-studio-p6-history-qa.sqlite3"
+          AI_STUDIO_QA_DEBUG: "1"
         run: |
           python -m streamlit run app.py --server.port 8502 --server.headless true > /tmp/app.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://localhost:8502/_stcore/health && break || sleep 1; done
