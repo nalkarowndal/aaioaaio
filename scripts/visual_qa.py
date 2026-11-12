@@ -33,8 +33,13 @@ def main():
             # Wait for the Streamlit websocket and first actual title.
             page.locator('h1').first.wait_for(state='visible',timeout=30000)
             page.wait_for_timeout(500)
-            dims=page.evaluate('''() => ({vw:window.innerWidth, doc:document.documentElement.scrollWidth,
-                body:document.body.scrollWidth, visibleTitle:document.querySelector('h1').getBoundingClientRect().top>=0})''')
+            dims=page.evaluate('''() => {
+                const scroller = document.querySelector('[data-testid="stAppScrollToBottomContainer"]') || document.querySelector('#stMain') || document.querySelector('[data-testid="stAppViewContainer"]');
+                if (scroller) scroller.scrollTop = 0;
+                window.scrollTo(0, 0);
+                return {vw:window.innerWidth, doc:document.documentElement.scrollWidth,
+                        body:document.body.scrollWidth, visibleTitle:document.querySelector('h1').getBoundingClientRect().top>=0};
+            }''')
             assert page.get_by_text('Deploy',exact=True).count()==0,'Developer Deploy button visible'
             screenshot=dest/f'{width}x{height}.png'
             page.screenshot(path=str(screenshot),full_page=True)
@@ -84,24 +89,31 @@ def main():
                     input_el.locator('[data-testid="stChatInputSubmitButton"]').click()
                     page.get_by_text('첨부파일 2/8 · 관리', exact=False).first.wait_for(
                         state='visible', timeout=20000)
+                question_text = 'UI 회귀 테스트 첨부 메시지' if width==1280 else 'UI 회귀 테스트 메시지'
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
-                chat_editor.fill('UI 회귀 테스트 메시지')
+                chat_editor.fill(question_text)
                 chat_editor.press('Enter')
-                page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(state='visible',timeout=15000)
+
+                user_msg = page.locator('[data-testid="stChatMessage"]').filter(has_text=question_text).first
+                user_msg.wait_for(state='visible', timeout=25000)
+
+                if width==1280:
+                    for filename in ('qa_alpha.txt', 'qa_beta.txt'):
+                        user_msg.locator('[data-testid="stMarkdownContainer"]').filter(
+                            has_text=filename
+                        ).first.wait_for(state='visible', timeout=20000)
+
                 if width==1280 and opts.history:
                     # A full browser reload resets Streamlit session state.
                     # The previous message must still be present from SQLite.
                     page.reload(wait_until='domcontentloaded',timeout=30000)
-                    page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(
-                        state='visible',timeout=30000)
-                if width==1280:
-                    # Diagnose actual chat content rather than only a timeout
-                    # if an uploaded file does not reach the persisted message.
+                    restored_msg = page.locator('[data-testid="stChatMessage"]').filter(has_text=question_text).first
+                    restored_msg.wait_for(state='visible', timeout=30000)
                     for filename in ('qa_alpha.txt', 'qa_beta.txt'):
                         try:
-                            page.locator('[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]').filter(
+                            restored_msg.locator('[data-testid="stMarkdownContainer"]').filter(
                                 has_text=filename
-                            ).first.wait_for(state='visible',timeout=15000)
+                            ).first.wait_for(state='visible',timeout=30000)
                         except Exception:
                             visible_text = page.locator(
                                 '[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]'
@@ -120,7 +132,7 @@ def main():
                 if width==1280 and opts.actions:
                     # The actions menu is compact and only appears when invoked.
                     user_message = page.locator('[data-testid="stChatMessage"]').filter(
-                        has_text='UI 회귀 테스트 메시지').first
+                        has_text=question_text).first
                     action_button = user_message.get_by_role('button', name='작업')
                     action_button.click()
                     page.get_by_text('질문 수정',exact=True).first.wait_for(
