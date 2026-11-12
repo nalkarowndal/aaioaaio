@@ -54,18 +54,27 @@ def main():
                 input_el.wait_for(state='visible',timeout=10000)
                 assert input_el.bounding_box()['y'] < height,'chat input is below viewport'
                 if width==1280:
-                    page.get_by_text('첨부파일 관리',exact=True).first.click()
-                    uploader=page.locator('[data-testid="stFileUploader"] input[type="file"]').first
+                    # P5: files are selected in the native chat composer, not a separate uploader.
+                    uploader=page.locator('[data-testid="stChatInput"] input[type="file"]').first
+                    if uploader.count()==0:
+                        # Some Streamlit builds mount the file input after opening attach.
+                        attach=page.locator('[data-testid="stChatInput"] button[aria-label*="Attach"]')
+                        if attach.count()==0:
+                            attach=page.locator('[data-testid="stChatInput"] button[title*="Attach"]')
+                        assert attach.count()>0, 'Native composer attachment control is missing'
+                        attach.first.click()
+                        uploader=page.locator('input[type="file"]').first
                     uploader.set_input_files([
                         {'name':'qa_alpha.txt','mimeType':'text/plain','buffer':b'alpha'},
                         {'name':'qa_beta.txt','mimeType':'text/plain','buffer':b'beta'},
                     ])
-                    page.get_by_text('qa_alpha.txt',exact=False).first.wait_for(state='visible',timeout=15000)
-                    page.get_by_text('qa_beta.txt',exact=False).first.wait_for(state='visible',timeout=15000)
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
                 page.get_by_text('UI 회귀 테스트 메시지',exact=False).first.wait_for(state='visible',timeout=15000)
+                if width==1280:
+                    page.get_by_text('qa_alpha.txt',exact=False).first.wait_for(state='visible',timeout=15000)
+                    page.get_by_text('qa_beta.txt',exact=False).first.wait_for(state='visible',timeout=15000)
                 user_avatar=page.locator('[data-testid="stChatMessageAvatarUser"]').first
                 user_avatar.wait_for(state='visible',timeout=10000)
                 bubble=user_avatar.locator('xpath=ancestor::*[@data-testid="stChatMessage"][1]')

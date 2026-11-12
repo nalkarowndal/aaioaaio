@@ -35,7 +35,7 @@ for key, default in (
         {'role': 'assistant', 'content': '안녕하세요! **AI Studio**입니다. Markdown, 코드블록, 표와 여러 문서·이미지를 활용해 대화할 수 있습니다.'}
     ]),
     ('attachments', {}), ('blocked_files', set()),
-    ('uploader_generation', 0), ('last_error', ''),
+    ('upload_notice', ''), ('last_error', ''),
 ):
     if key not in st.session_state:
         st.session_state[key] = default
@@ -69,47 +69,6 @@ st.markdown('''
 </header>
 ''', unsafe_allow_html=True)
 
-with st.expander('첨부파일 관리', expanded=False):
-    uploads = st.file_uploader(
-        '문서 또는 이미지 첨부 (한 번에 여러 개 선택 가능)',
-        type=sorted(ext.lstrip('.') for ext in ALLOWED_TYPES),
-        accept_multiple_files=True,
-        key=f'files_{st.session_state.uploader_generation}',
-        max_upload_size=10,
-        help='개별 최대 10MB, 최대 8개까지 추가됩니다.',
-    )
-    if uploads:
-        samples = [(file.name, file.getvalue()) for file in uploads]
-        st.session_state.attachments, st.session_state.blocked_files = upload_snapshot(
-            st.session_state.attachments, st.session_state.blocked_files, samples
-        )
-        if len(uploads) > MAX_UPLOADS:
-            st.warning('한 번에 최대 8개까지만 보관됩니다.')
-
-    st.caption(f'선택된 파일: {len(st.session_state.attachments)}/{MAX_UPLOADS}')
-    for attachment_id, item in list(st.session_state.attachments.items()):
-        left, right = st.columns([5, 1], vertical_alignment='center')
-        with left:
-            symbol = '이미지' if item['kind'] == 'image' else '문서'
-            status = {'ready': '준비됨', 'error': '읽기 실패'}.get(item['status'], '확인 필요')
-            extra = ' · 일부 텍스트만 추출' if item['truncated'] else ''
-            st.text(item['name'])
-            st.caption(f'{symbol} · {status}{extra}')
-        with right:
-            if st.button('제거', key=f'rm_{attachment_id}', help=f"{item['name']} 제거"):
-                st.session_state.attachments, st.session_state.blocked_files = remove_attachment(
-                    st.session_state.attachments, st.session_state.blocked_files, attachment_id
-                )
-                st.rerun()
-        if item['kind'] == 'image' and item['status'] == 'ready':
-            with st.expander(f"이미지 미리보기: {item['name']}"):
-                st.image(item['bytes'], use_container_width=True)
-    if st.button('첨부 선택 초기화', help='모든 첨부 항목과 업로더 선택을 초기화'):
-        st.session_state.attachments = {}
-        st.session_state.blocked_files = set()
-        st.session_state.uploader_generation += 1
-        st.rerun()
-
 if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
@@ -117,8 +76,67 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else None):
         render_assistant_markdown(msg['content'])
 
-message = st.chat_input('질문을 입력하세요 · 첨부파일은 위의 첨부파일 관리에서 선택하세요')
-if message and message.strip():
+# Keep attachment controls out of the way until files are actually present.
+# Previously attached files stay available for subsequent prompts until removed.
+if st.session_state.attachments:
+    with st.expander(f"첨부파일 {len(st.session_state.attachments)}/{MAX_UPLOADS} · 관리", expanded=False):
+        st.caption('입력창의 첨부 버튼으로 파일을 추가하세요. 개별 파일 10MB, 최대 8개까지 보관합니다.')
+        for attachment_id, item in list(st.session_state.attachments.items()):
+            left, right = st.columns([5, 1], vertical_alignment='center')
+            with left:
+                symbol = '이미지' if item['kind'] == 'image' else '문서'
+                status = {'ready': '준비됨', 'error': '읽기 실패'}.get(item['status'], '확인 필요')
+                extra = ' · 일부 텍스트만 추출' if item['truncated'] else ''
+                st.text(item['name'])
+                st.caption(f'{symbol} · {status}{extra}')
+            with right:
+                if st.button('제거', key=f'rm_{attachment_id}', help=f"{item['name']} 제거"):
+                    st.session_state.attachments, st.session_state.blocked_files = remove_attachment(
+                        st.session_state.attachments, st.session_state.blocked_files, attachment_id
+                    )
+                    st.rerun()
+            if item['kind'] == 'image' and item['status'] == 'ready':
+                with st.expander(f"이미지 미리보기: {item['name']}"):
+                    st.image(item['bytes'], use_container_width=True)
+        if st.button('모든 첨부 제거', help='보관된 첨부 항목 모두 삭제'):
+            st.session_state.attachments = {}
+            st.session_state.blocked_files = set()
+            st.session_state.upload_notice = ''
+            st.rerun()
+
+if st.session_state.upload_notice:
+    st.info(st.session_state.upload_notice)
+
+# The native chat composer owns the attachment entry point, instead of
+# displaying a second file-upload widget above the conversation.
+submission = st.chat_input(
+    '질문을 입력하거나 파일을 첨부하세요',
+    accept_file='multiple',
+    file_type=sorted(ext.lstrip('.') for ext in ALLOWED_TYPES),
+    max_upload_size=10,
+    key='unified_chat_composer',
+)
+message = ''
+if submission is not None:
+    message = (submission.text or '').strip()
+    submitted_files = [(file.name, file.getvalue()) for file in submission.files]
+    if submitted_files:
+        # Each composer submission is a deliberate new attachment action.
+        # Blocked IDs only protect the old uploader snapshot, not re-selection.
+        st.session_state.blocked_files = set()
+        before_count = len(st.session_state.attachments)
+        st.session_state.attachments, st.session_state.blocked_files = upload_snapshot(
+            st.session_state.attachments, st.session_state.blocked_files, submitted_files
+        )
+        accepted = len(st.session_state.attachments) - before_count
+        if accepted < len(submitted_files):
+            st.session_state.upload_notice = '일부 파일을 추가하지 못했습니다. 최대 8개·파일당 10MB 및 중복 여부를 확인하세요.'
+        else:
+            st.session_state.upload_notice = ''
+    # A file-only submission stages the attachments without calling Groq.
+    if not message:
+        st.rerun()
+if message:
     user_text = message.strip()
     attached = [f"{item['name']} ({'준비됨' if item['status'] == 'ready' else '읽기 실패'})" for item in st.session_state.attachments.values()]
     display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
