@@ -121,7 +121,12 @@ def main():
                     action_button.click()
                     page.get_by_text('질문 수정',exact=True).first.wait_for(
                         state='visible',timeout=10000)
-                    assert page.locator('pre code').count() > 0, 'Copyable plain text block missing'
+                    # Streamlit changes code-block DOM markup between versions.
+                    # Assert the user-visible copy instruction; app source tests
+                    # separately verify this menu renders st.code with its native copy.
+                    page.get_by_text(
+                        '복사: 아래 원문 오른쪽 위의 복사 아이콘을 사용하세요.', exact=True
+                    ).wait_for(state='visible', timeout=10000)
                     page.get_by_role('textbox', name='질문 수정').fill('P7 수정된 질문')
                     page.get_by_role('button', name='수정 후 다시 질문').click()
                     page.locator('[data-testid="stChatMessage"]').filter(
