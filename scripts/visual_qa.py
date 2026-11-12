@@ -56,20 +56,19 @@ def main():
                 input_el.wait_for(state='visible',timeout=10000)
                 assert input_el.bounding_box()['y'] < height,'chat input is below viewport'
                 if width==1280:
-                    # P5: files are selected in the native chat composer, not a separate uploader.
-                    uploader=page.locator('[data-testid="stChatInput"] input[type="file"]').first
-                    if uploader.count()==0:
-                        # Some Streamlit builds mount the file input after opening attach.
-                        attach=page.locator('[data-testid="stChatInput"] button[aria-label*="Attach"]')
-                        if attach.count()==0:
-                            attach=page.locator('[data-testid="stChatInput"] button[title*="Attach"]')
-                        assert attach.count()>0, 'Native composer attachment control is missing'
-                        attach.first.click()
-                        uploader=page.locator('input[type="file"]').first
-                    uploader.set_input_files([
+                    # Mirror Streamlit's official Playwright E2E workflow:
+                    # click the actual file-upload button, then file chooser.
+                    upload_button = input_el.locator('[data-testid="stChatInputFileUploadButton"]')
+                    upload_button.wait_for(state='visible', timeout=10000)
+                    with page.expect_file_chooser() as chooser:
+                        upload_button.click()
+                    chooser.value.set_files([
                         {'name':'qa_alpha.txt','mimeType':'text/plain','buffer':b'alpha'},
                         {'name':'qa_beta.txt','mimeType':'text/plain','buffer':b'beta'},
                     ])
+                    page.keyboard.press('Escape')
+                    page.locator('[data-testid="stApp"]').click(
+                        position={'x':0,'y':0}, force=True)
                     # Upload processing is asynchronous. Pressing Enter too early
                     # intermittently posts text without its file attachments.
                     # Require both native-composer previews before submitting.
@@ -80,6 +79,11 @@ def main():
                     # The browser preview appears before the file payload is
                     # necessarily acknowledged by the Streamlit websocket.
                     page.wait_for_timeout(1000)
+                    # P5 allows file-only submissions; stage uploads first,
+                    # then send the question in a separate submission.
+                    input_el.locator('[data-testid="stChatInputSubmitButton"]').click()
+                    page.get_by_text('첨부파일 2/8 · 관리', exact=False).first.wait_for(
+                        state='visible', timeout=20000)
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
