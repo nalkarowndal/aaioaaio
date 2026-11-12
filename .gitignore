@@ -12,3 +12,8 @@ venv/
 .DS_Store
 analysis_exports/
 *.zip
+# P6: user conversation content must never enter Git.
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

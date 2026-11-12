@@ -29,10 +29,13 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://localhost:8501/_stcore/health && break || sleep 1; done
           python scripts/visual_qa.py --fixture --output docs/screenshots/fixture
       - name: Main application browser QA
+        env:
+          AI_STUDIO_SINGLE_USER_HISTORY: "1"
+          AI_STUDIO_HISTORY_DB: "/tmp/ai-studio-p6-history-qa.sqlite3"
         run: |
           python -m streamlit run app.py --server.port 8502 --server.headless true > /tmp/app.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://localhost:8502/_stcore/health && break || sleep 1; done
-          python scripts/visual_qa.py --url http://localhost:8502 --output docs/screenshots/app
+          python scripts/visual_qa.py --url http://localhost:8502 --history --output docs/screenshots/app
       - name: Upload visual QA evidence
         if: always()
         uses: actions/upload-artifact@v4
