@@ -15,6 +15,7 @@ python -m streamlit run app.py
 ## QA
 
 ```bash
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 python -m compileall -q app.py core
 ```
