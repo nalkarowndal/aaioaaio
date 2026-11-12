@@ -114,13 +114,13 @@ if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
 for msg in st.session_state.chat_history:
-    with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else None):
+    with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else ':material/person:'):
         render_assistant_markdown(msg['content'])
 
 message = st.chat_input('질문을 입력하세요 · 첨부파일은 위의 첨부파일 관리에서 선택하세요')
 if message and message.strip():
     user_text = message.strip()
-    attached = [f"{item['name']} ({item['status']})" for item in st.session_state.attachments.values()]
+    attached = [f"{item['name']} ({'준비됨' if item['status'] == 'ready' else '읽기 실패'})" for item in st.session_state.attachments.values()]
     display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
     history = st.session_state.chat_history
     history.append({'role': 'user', 'content': display_text})

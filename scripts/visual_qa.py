@@ -42,6 +42,12 @@ def main():
                 assert page.locator('table').count()>0,'Markdown table not rendered'
                 assert page.locator('h2').count()>0,'heading h2 not rendered'
                 assert page.locator('h3').count()>0,'heading h3 not rendered'
+                if width == 375:
+                    md=page.locator('[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]').first
+                    metrics=md.evaluate('el => ({width:el.clientWidth, scrollWidth:el.scrollWidth})')
+                    assert metrics['scrollWidth'] > metrics['width']+5, f'Long table not scrollable: {metrics}'
+                    md.evaluate('el => {el.scrollLeft=100}')
+                    assert md.evaluate('el => el.scrollLeft')>0, 'Cannot horizontally scroll Markdown table'
             else:
                 # Chat input must exist and be visible on main app.
                 input_el=page.locator('[data-testid="stChatInput"]').first

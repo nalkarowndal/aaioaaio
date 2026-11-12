@@ -72,7 +72,7 @@ header[data-testid="stHeader"] { background:transparent; }
 /* Focus visibility, mobile safe areas and long filenames. */
 button:focus-visible, input:focus-visible, textarea:focus-visible {outline:2px solid var(--accent-cyan);outline-offset:2px;}
 @media (max-width:768px) {
-  .block-container {padding-top:.85rem !important;padding-left:1rem !important;padding-right:1rem !important;padding-bottom:calc(7rem + env(safe-area-inset-bottom)) !important;}
+  .block-container {padding-top:2rem !important;padding-left:1rem !important;padding-right:1rem !important;padding-bottom:calc(7rem + env(safe-area-inset-bottom)) !important;}
   .glass-header {padding:12px 14px;margin-bottom:14px;}
   .header-left {gap:10px;}
   .brand-icon-wrapper {width:40px;height:40px;border-radius:12px;}
@@ -97,3 +97,5 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {outline:2px s
 
 /* Brand-consistent material avatar rather than Streamlit's default orange bot. */
 [data-testid="stChatMessageAvatarAssistant"] { background:rgba(99,102,241,.24) !important;color:#c7d2fe !important;border:1px solid rgba(129,140,248,.35);border-radius:12px; }
+
+[data-testid="stChatMessageAvatarUser"] { background:rgba(255,255,255,.14) !important;color:#fff !important;border:1px solid rgba(255,255,255,.25);border-radius:12px; }

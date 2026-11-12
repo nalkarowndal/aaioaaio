@@ -44,3 +44,9 @@ def test_production_toolbar_does_not_show_deploy_control():
 def test_assistant_avatar_uses_brand_material_icon():
     source=APP.read_text(encoding='utf-8')
     assert ':material/auto_awesome:' in source
+
+
+def test_user_avatar_and_status_labels_are_brand_consistent():
+    source=APP.read_text(encoding='utf-8')
+    assert ':material/person:' in source
+    assert "'준비됨' if item['status'] == 'ready' else '읽기 실패'" in source
