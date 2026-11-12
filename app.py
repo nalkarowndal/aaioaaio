@@ -319,7 +319,7 @@ if message or pending_generate or pending_regenerate is not None:
             f"{item['name']} ({'준비됨' if item['status'] == 'ready' else '읽기 실패'})"
             for item in attachments_for_request
         ]
-        display_text = user_text + ('\\n\\n첨부: ' + ', '.join(attached) if attached else '')
+        display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
         history.append({'role': 'user', 'content': display_text})
         persist_chat()  # A sent question is never lost if streaming subsequently fails.
         history_before = history[:-1]
@@ -360,14 +360,14 @@ if message or pending_generate or pending_regenerate is not None:
             if item['status'] != 'ready':
                 continue
             if item['kind'] == 'document':
-                note = '\\n[주의: 문서 일부만 추출됨]' if item['truncated'] else ''
-                blocks.append(f"[참고 문서: {item['name']}{note}]\\n{item['content']}\\n[/참고 문서]")
+                note = '\n[주의: 문서 일부만 추출됨]' if item['truncated'] else ''
+                blocks.append(f"[참고 문서: {item['name']}{note}]\n{item['content']}\n[/참고 문서]")
             else:
                 image_count += 1
 
         question = user_text
         if blocks:
-            question = '\\n\\n'.join(blocks) + '\\n\\n[사용자 질문]\\n' + user_text
+            question = '\n\n'.join(blocks) + '\n\n[사용자 질문]\n' + user_text
         target_model = vision_model.strip() if image_count else model.strip()
 
         if image_count and not target_model:
