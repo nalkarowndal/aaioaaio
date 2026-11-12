@@ -71,3 +71,12 @@ def test_two_uploaded_files_remain_independent():
     current,blocked=remove_attachment(current,blocked,first)
     assert len(current)==1
     assert fingerprint('b.txt',b'b') in current
+
+
+def test_new_ninth_upload_can_fill_slot_after_first_was_removed():
+    raw=[(f"{i}.txt",str(i).encode()) for i in range(8)]
+    current, blocked=upload_snapshot({},set(),raw)
+    current, blocked=remove_attachment(current,blocked,fingerprint("0.txt",b"0"))
+    current,blocked=upload_snapshot(current,blocked,raw+[("8.txt",b"8")])
+    assert len(current)==8
+    assert fingerprint("8.txt",b"8") in current

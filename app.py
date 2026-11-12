@@ -79,7 +79,7 @@ with st.expander(f'첨부파일 관리 · {len(st.session_state.attachments)}/{M
         help='개별 최대 10MB, 최대 8개까지 추가됩니다.',
     )
     if uploads:
-        samples = [(file.name, file.getvalue()) for file in uploads[:MAX_UPLOADS]]
+        samples = [(file.name, file.getvalue()) for file in uploads]
         st.session_state.attachments, st.session_state.blocked_files = upload_snapshot(
             st.session_state.attachments, st.session_state.blocked_files, samples
         )

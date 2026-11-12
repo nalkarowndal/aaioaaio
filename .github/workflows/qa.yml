@@ -1,0 +1,42 @@
+name: AI Studio regression QA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime and QA dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest playwright
+          python -m playwright install --with-deps chromium
+      - name: Unit tests and Python syntax
+        run: |
+          python -m pytest -q
+          python -m compileall -q app.py core scripts
+      - name: Markdown fixture browser QA
+        run: |
+          python -m streamlit run scripts/markdown_fixture.py --server.port 8501 --server.headless true > /tmp/fixture.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://localhost:8501/_stcore/health && break || sleep 1; done
+          python scripts/visual_qa.py --fixture --output docs/screenshots/fixture
+      - name: Main application browser QA
+        run: |
+          python -m streamlit run app.py --server.port 8502 --server.headless true > /tmp/app.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://localhost:8502/_stcore/health && break || sleep 1; done
+          python scripts/visual_qa.py --url http://localhost:8502 --output docs/screenshots/app
+      - name: Upload visual QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-studio-visual-qa
+          path: docs/screenshots/
+          if-no-files-found: ignore
