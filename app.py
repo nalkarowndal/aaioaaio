@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 from pathlib import Path
+import sqlite3
 
 import streamlit as st
 from openai import OpenAI, APITimeoutError, APIConnectionError, AuthenticationError, RateLimitError
 
 from core.attachments import ALLOWED_TYPES, MAX_UPLOADS, prepare_image, remove_attachment, upload_snapshot
+from core.conversations import ConversationStore
 from core.markdown_render import render_assistant_markdown
 
 st.set_page_config(page_title='AI Studio', page_icon='✨', layout='wide', initial_sidebar_state='collapsed')
@@ -36,12 +39,126 @@ for key, default in (
     ]),
     ('attachments', {}), ('blocked_files', set()),
     ('upload_notice', ''), ('last_error', ''),
+    ('active_conversation_id', None), ('history_session_owner', None),
+    ('history_loaded', False), ('history_notice', ''), ('delete_pending', None),
 ):
     if key not in st.session_state:
         st.session_state[key] = default
 
+def conversation_owner() -> str:
+    """OIDC users get isolated histories; guests never share a public history."""
+    try:
+        if st.user.is_logged_in:
+            subject = str(st.user.get('sub', '')).strip()
+            issuer = str(st.user.get('iss', 'oidc')).strip()
+            if subject:
+                digest = hashlib.sha256((issuer + ':' + subject).encode('utf-8')).hexdigest()
+                return 'oidc:' + digest
+    except (AttributeError, KeyError, RuntimeError):
+        pass
+    # Unauthenticated persistence is permitted only on explicitly trusted
+    # single-user local installations; NEVER set this on a public deployment.
+    if os.getenv('AI_STUDIO_SINGLE_USER_HISTORY', '') == '1':
+        return 'local:single-user'
+    return ''
+
+
+def reset_active_chat() -> None:
+    st.session_state.active_conversation_id = None
+    st.session_state.chat_history = []
+    st.session_state.attachments = {}
+    st.session_state.blocked_files = set()
+    st.session_state.upload_notice = ''
+    st.session_state.last_error = ''
+    st.session_state.delete_pending = None
+
+
+history_owner = conversation_owner()
+history_store = None
+if history_owner:
+    try:
+        db_path = Path(os.getenv('AI_STUDIO_HISTORY_DB', str(APP_DIR / 'data' / 'conversations.sqlite3')))
+        history_store = ConversationStore(db_path)
+    except (sqlite3.Error, OSError):
+        st.warning('대화 기록 저장소를 열 수 없습니다. 현재 세션에서만 채팅이 유지됩니다.')
+
+# Never carry one user or one conversation's file attachments into another.
+if st.session_state.history_session_owner != history_owner:
+    reset_active_chat()
+    st.session_state.history_session_owner = history_owner
+    st.session_state.history_loaded = False
+if history_store and not st.session_state.history_loaded:
+    latest = history_store.list(history_owner, limit=1)
+    if latest:
+        restored = history_store.get(history_owner, latest[0]['id'])
+        if restored:
+            st.session_state.active_conversation_id = restored['id']
+            st.session_state.chat_history = restored['messages']
+    st.session_state.history_loaded = True
+
+
+def persist_chat() -> None:
+    """Persist a user message before external calls, then the completed reply."""
+    if not history_store:
+        return
+    try:
+        active_id = st.session_state.active_conversation_id
+        if active_id is None:
+            st.session_state.active_conversation_id = history_store.create(
+                history_owner, st.session_state.chat_history)
+        elif not history_store.save(history_owner, active_id, st.session_state.chat_history):
+            raise ValueError('삭제된 대화에 저장할 수 없습니다.')
+        st.session_state.history_notice = ''
+    except (sqlite3.Error, OSError, ValueError):
+        st.session_state.history_notice = '대화 기록을 저장하지 못했습니다. 현재 세션의 내용은 유지됩니다.'
+
+
 key = api_key()
 with st.sidebar:
+    if history_store:
+        st.subheader('대화 기록')
+        if history_owner == 'local:single-user':
+            st.caption('로컬 단일 사용자 저장소 · 공개 서버에서는 사용하지 마세요.')
+        if st.button('새 대화', use_container_width=True, key='new_conversation'):
+            reset_active_chat()
+            st.rerun()
+        history_query = st.text_input('대화 검색', placeholder='제목 또는 대화 내용', key='history_search')
+        conversations = history_store.list(history_owner, query=history_query)
+        if not conversations:
+            st.caption('저장된 대화가 없습니다.')
+        for item in conversations:
+            if st.button(item['title'][:45], key='open_' + item['id'],
+                         help=item['title'], use_container_width=True):
+                restored = history_store.get(history_owner, item['id'])
+                if restored:
+                    reset_active_chat()
+                    st.session_state.active_conversation_id = restored['id']
+                    st.session_state.chat_history = restored['messages']
+                    st.rerun()
+        active_id = st.session_state.active_conversation_id
+        if active_id:
+            current = history_store.get(history_owner, active_id)
+            if current:
+                with st.expander('현재 대화 관리', expanded=False):
+                    new_title = st.text_input('대화 이름', value=current['title'],
+                                              key='title_' + active_id)
+                    if st.button('이름 저장', key='rename_conversation'):
+                        try:
+                            history_store.rename(history_owner, active_id, new_title)
+                            st.rerun()
+                        except ValueError:
+                            st.warning('비어 있지 않은 이름을 입력하세요.')
+                    if st.button('대화 삭제', key='request_delete'):
+                        st.session_state.delete_pending = active_id
+                    if st.session_state.delete_pending == active_id:
+                        st.warning('삭제한 대화는 복구할 수 없습니다.')
+                        if st.button('삭제 확인', key='confirm_delete'):
+                            history_store.delete(history_owner, active_id)
+                            reset_active_chat()
+                            st.rerun()
+        st.divider()
+    else:
+        st.caption('대화 기록은 현재 세션에만 유지됩니다. 로컬 개인용 저장은 환경 변수 AI_STUDIO_SINGLE_USER_HISTORY=1 로 활성화하세요.')
     st.subheader('환경 설정')
     st.caption('브라우저에서 비밀키를 직접 입력하거나 표시하지 않습니다.')
     st.write('Groq API: ' + ('키 설정됨 · 연결 미검증' if key else '키 미설정'))
@@ -50,9 +167,8 @@ with st.sidebar:
                                  help='Groq에서 이미지 입력을 지원하는 모델 ID')
     temperature = st.slider('Temperature', 0.0, 1.5, 0.6, 0.1)
     max_tokens = st.slider('최대 응답 토큰', 256, 4096, 1024, 256)
-    if st.button('대화 초기화', use_container_width=True):
-        st.session_state.chat_history = []
-        st.session_state.last_error = ''
+    if not history_store and st.button('대화 초기화', use_container_width=True):
+        reset_active_chat()
         st.rerun()
 
 # Static HTML shell. Untrusted message or filename text is never inserted here.
@@ -69,6 +185,8 @@ st.markdown('''
 </header>
 ''', unsafe_allow_html=True)
 
+if st.session_state.history_notice:
+    st.warning(st.session_state.history_notice)
 if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
@@ -142,6 +260,7 @@ if message:
     display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
     history = st.session_state.chat_history
     history.append({'role': 'user', 'content': display_text})
+    persist_chat()
     st.session_state.last_error = ''
 
     if not key:
@@ -207,4 +326,5 @@ if message:
                     st.session_state.last_error = 'Groq 서버 연결 또는 응답 시간이 초과되었습니다.'
                 except Exception:
                     st.session_state.last_error = 'AI 요청 중 오류가 발생했습니다. 모델 및 API 상태를 확인해 주세요.'
+    persist_chat()
     st.rerun()
