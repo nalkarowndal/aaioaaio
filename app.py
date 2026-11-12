@@ -12,6 +12,7 @@ from openai import OpenAI, APITimeoutError, APIConnectionError, AuthenticationEr
 
 from core.attachments import ALLOWED_TYPES, MAX_UPLOADS, prepare_image, remove_attachment, upload_snapshot
 from core.conversations import ConversationStore
+from core.chat_ops import edit_user_message, regenerate_source, stream_text_chunks
 from core.markdown_render import render_assistant_markdown
 
 st.set_page_config(page_title='AI Studio', page_icon='✨', layout='wide', initial_sidebar_state='collapsed')
@@ -41,6 +42,7 @@ for key, default in (
     ('upload_notice', ''), ('last_error', ''),
     ('active_conversation_id', None), ('history_session_owner', None),
     ('history_loaded', False), ('history_notice', ''), ('delete_pending', None),
+    ('pending_generate', False), ('pending_regenerate_index', None),
 ):
     if key not in st.session_state:
         st.session_state[key] = default
@@ -71,6 +73,8 @@ def reset_active_chat() -> None:
     st.session_state.upload_notice = ''
     st.session_state.last_error = ''
     st.session_state.delete_pending = None
+    st.session_state.pending_generate = False
+    st.session_state.pending_regenerate_index = None
 
 
 history_owner = conversation_owner()
@@ -193,9 +197,49 @@ if st.session_state.history_notice:
 if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
-for msg in st.session_state.chat_history:
+for message_index, msg in enumerate(st.session_state.chat_history):
     with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else None):
         render_assistant_markdown(msg['content'])
+        # One compact per-message action menu; no permanent rows of controls.
+        is_answer = (msg['role'] == 'assistant' and message_index > 0
+                     and st.session_state.chat_history[message_index - 1]['role'] == 'user')
+        if msg['role'] == 'user' or is_answer:
+            with st.popover('작업', icon=':material/more_horiz:'):
+                st.caption('복사: 아래 원문 오른쪽 위의 복사 아이콘을 사용하세요.')
+                st.code(msg['content'], language=None)
+                if msg['role'] == 'user':
+                    with st.form('edit_form_' + str(message_index)):
+                        edit_text = st.text_area(
+                            '질문 수정', value=msg['content'],
+                            max_chars=12_000,
+                            key=('edit_' + str(st.session_state.active_conversation_id)
+                                 + '_' + str(message_index) + '_'
+                                 + hashlib.sha256(msg['content'].encode('utf-8')).hexdigest()[:12]),
+                        )
+                        st.caption('수정하면 이 질문 이후 대화가 제거됩니다. 첨부파일은 다시 선택해야 합니다.')
+                        if st.form_submit_button('수정 후 다시 질문'):
+                            try:
+                                updated = edit_user_message(
+                                    st.session_state.chat_history, message_index, edit_text)
+                                st.session_state.chat_history = updated
+                                st.session_state.attachments = {}
+                                st.session_state.blocked_files = set()
+                                st.session_state.pending_regenerate_index = None
+                                st.session_state.pending_generate = True
+                                persist_chat()
+                                st.rerun()
+                            except ValueError as error:
+                                st.warning(str(error))
+                elif st.button('답변 다시 생성', key='regen_' + str(message_index)):
+                    try:
+                        regenerate_source(st.session_state.chat_history, message_index)
+                    except ValueError as error:
+                        st.session_state.last_error = str(error)
+                    else:
+                        st.session_state.pending_regenerate_index = message_index
+                    st.rerun()
+                if is_answer:
+                    st.caption('이전 답변을 재생성하면 이후 대화는 성공 시에만 대체됩니다.')
 
 # Keep attachment controls out of the way until files are actually present.
 # Previously attached files stay available for subsequent prompts until removed.
@@ -257,46 +301,85 @@ if submission is not None:
     # A file-only submission stages the attachments without calling Groq.
     if not message:
         st.rerun()
-if message:
-    user_text = message.strip()
-    attached = [f"{item['name']} ({'준비됨' if item['status'] == 'ready' else '읽기 실패'})" for item in st.session_state.attachments.values()]
-    display_text = user_text + ('\n\n첨부: ' + ', '.join(attached) if attached else '')
-    history = st.session_state.chat_history
-    history.append({'role': 'user', 'content': display_text})
-    persist_chat()
-    st.session_state.last_error = ''
 
-    if not key:
-        st.session_state.last_error = 'Groq API 키가 설정되지 않았습니다. 환경변수 GROQ_API_KEY를 설정해 주세요. AI 응답은 생성되지 않았습니다.'
+# Keep regeneration atomic: retain the existing reply if the request fails.
+pending_regenerate = st.session_state.pending_regenerate_index
+pending_generate = st.session_state.pending_generate
+if message or pending_generate or pending_regenerate is not None:
+    history = st.session_state.chat_history
+    st.session_state.pending_generate = False
+    st.session_state.pending_regenerate_index = None
+    replacing_index = None
+    attachments_for_request = []
+
+    if message:
+        user_text = message.strip()
+        attachments_for_request = list(st.session_state.attachments.values())
+        attached = [
+            f"{item['name']} ({'준비됨' if item['status'] == 'ready' else '읽기 실패'})"
+            for item in attachments_for_request
+        ]
+        display_text = user_text + ('\\n\\n첨부: ' + ', '.join(attached) if attached else '')
+        history.append({'role': 'user', 'content': display_text})
+        persist_chat()  # A sent question is never lost if streaming subsequently fails.
+        history_before = history[:-1]
+    elif pending_generate:
+        if not history or history[-1]['role'] != 'user':
+            st.session_state.last_error = '수정한 질문을 찾을 수 없습니다.'
+            st.rerun()
+        user_text = history[-1]['content']
+        history_before = history[:-1]
+        # Earlier file bytes are never silently reused after editing.
     else:
-        messages = [{'role': 'system', 'content': 'You are a careful, accurate AI assistant. Answer in Korean unless asked otherwise. Use Markdown.'}]
-        for previous in history[-13:-1]:
+        try:
+            history_including_user, user_text = regenerate_source(history, pending_regenerate)
+            history_before = history_including_user[:-1]
+            replacing_index = pending_regenerate
+        except ValueError as error:
+            st.session_state.last_error = str(error)
+            st.rerun()
+
+    st.session_state.last_error = ''
+    if not key:
+        st.session_state.last_error = (
+            'Groq API 키가 설정되지 않았습니다. 환경변수 GROQ_API_KEY를 설정해 주세요. '
+            'AI 응답은 생성되지 않았습니다.'
+        )
+    else:
+        messages = [{
+            'role': 'system',
+            'content': 'You are a careful, accurate AI assistant. Answer in Korean unless asked otherwise. Use Markdown.'
+        }]
+        for previous in history_before[-12:]:
             if previous['role'] in ('user', 'assistant'):
                 messages.append({'role': previous['role'], 'content': previous['content']})
 
         blocks = []
         image_count = 0
-        for item in st.session_state.attachments.values():
+        for item in attachments_for_request:
             if item['status'] != 'ready':
                 continue
             if item['kind'] == 'document':
-                note = '\n[주의: 문서 일부만 추출됨]' if item['truncated'] else ''
-                blocks.append(f"[참고 문서: {item['name']}{note}]\n{item['content']}\n[/참고 문서]")
+                note = '\\n[주의: 문서 일부만 추출됨]' if item['truncated'] else ''
+                blocks.append(f"[참고 문서: {item['name']}{note}]\\n{item['content']}\\n[/참고 문서]")
             else:
                 image_count += 1
+
         question = user_text
         if blocks:
-            question = '\n\n'.join(blocks) + '\n\n[사용자 질문]\n' + user_text
-
+            question = '\\n\\n'.join(blocks) + '\\n\\n[사용자 질문]\\n' + user_text
         target_model = vision_model.strip() if image_count else model.strip()
+
         if image_count and not target_model:
-            st.session_state.last_error = '이미지가 선택되었습니다. 환경 설정에 이미지 입력을 지원하는 Groq 모델 ID를 지정해 주세요.'
+            st.session_state.last_error = (
+                '이미지가 선택되었습니다. 환경 설정에 이미지 입력을 지원하는 Groq 모델 ID를 지정해 주세요.'
+            )
         elif not target_model:
             st.session_state.last_error = '설정된 모델 ID가 없습니다.'
         else:
             if image_count:
                 parts = [{'type': 'text', 'text': question}]
-                for item in st.session_state.attachments.values():
+                for item in attachments_for_request:
                     if item['status'] == 'ready' and item['kind'] == 'image':
                         try:
                             mime, encoded_bytes = prepare_image(item['bytes'])
@@ -310,15 +393,25 @@ if message:
 
             if not st.session_state.last_error:
                 try:
-                    with st.spinner('AI 응답 생성 중...'):
-                        answer = OpenAI(base_url='https://api.groq.com/openai/v1', api_key=key,
-                                        timeout=40.0, max_retries=1).chat.completions.create(
-                            model=target_model, messages=messages,
-                            temperature=temperature, max_tokens=max_tokens
-                        )
-                    reply = (answer.choices[0].message.content or '').strip()
-                    if reply:
-                        history.append({'role': 'assistant', 'content': reply})
+                    # The stream is consumed inside the API client's lifetime.
+                    # No partially received response is persisted.
+                    with OpenAI(base_url='https://api.groq.com/openai/v1',
+                                api_key=key, timeout=40.0, max_retries=1) as client:
+                        with st.chat_message('assistant', avatar=':material/auto_awesome:'):
+                            with st.spinner('AI 답변 생성 중...'):
+                                stream = client.chat.completions.create(
+                                    model=target_model, messages=messages, stream=True,
+                                    temperature=temperature, max_tokens=max_tokens
+                                )
+                                reply = st.write_stream(stream_text_chunks(stream))
+                    if isinstance(reply, str) and reply.strip():
+                        new_answer = {'role': 'assistant', 'content': reply.strip()}
+                        if replacing_index is None:
+                            history.append(new_answer)
+                        else:
+                            # Any later turns become inconsistent with the new answer.
+                            st.session_state.chat_history = history[:replacing_index] + [new_answer]
+                        persist_chat()
                     else:
                         st.session_state.last_error = '모델 응답이 비어 있어 표시할 내용이 없습니다.'
                 except AuthenticationError:
@@ -327,7 +420,8 @@ if message:
                     st.session_state.last_error = '요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.'
                 except (APITimeoutError, APIConnectionError):
                     st.session_state.last_error = 'Groq 서버 연결 또는 응답 시간이 초과되었습니다.'
+                except ValueError:
+                    st.session_state.last_error = '답변 길이가 저장 가능한 한도를 초과했습니다.'
                 except Exception:
                     st.session_state.last_error = 'AI 요청 중 오류가 발생했습니다. 모델 및 API 상태를 확인해 주세요.'
-    persist_chat()
     st.rerun()
