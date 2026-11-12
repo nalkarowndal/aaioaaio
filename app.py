@@ -83,7 +83,10 @@ if history_owner:
         st.warning('대화 기록 저장소를 열 수 없습니다. 현재 세션에서만 채팅이 유지됩니다.')
 
 # Never carry one user or one conversation's file attachments into another.
-if st.session_state.history_session_owner != history_owner:
+if st.session_state.history_session_owner is None:
+    # First page load: retain the original greeting until saved data is found.
+    st.session_state.history_session_owner = history_owner
+elif st.session_state.history_session_owner != history_owner:
     reset_active_chat()
     st.session_state.history_session_owner = history_owner
     st.session_state.history_loaded = False
