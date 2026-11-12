@@ -114,7 +114,7 @@ if st.session_state.last_error:
     st.warning(st.session_state.last_error)
 
 for msg in st.session_state.chat_history:
-    with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else ':material/person:'):
+    with st.chat_message(msg['role'], avatar=':material/auto_awesome:' if msg['role'] == 'assistant' else None):
         render_assistant_markdown(msg['content'])
 
 message = st.chat_input('질문을 입력하세요 · 첨부파일은 위의 첨부파일 관리에서 선택하세요')

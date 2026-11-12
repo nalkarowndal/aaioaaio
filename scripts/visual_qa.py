@@ -66,6 +66,11 @@ def main():
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
                 page.get_by_text('UI 회귀 테스트 메시지',exact=False).first.wait_for(state='visible',timeout=15000)
+                user_avatar=page.locator('[data-testid="stChatMessageAvatarUser"]').first
+                user_avatar.wait_for(state='visible',timeout=10000)
+                bubble=user_avatar.locator('xpath=ancestor::*[@data-testid="stChatMessage"][1]')
+                bg=bubble.evaluate('el => getComputedStyle(el).backgroundImage')
+                assert 'linear-gradient' in bg, f'User bubble styling lost: {bg}'
                 page.screenshot(path=str(dest/f'{width}x{height}_interactions.png'),full_page=True)
             report.append({'viewport':f'{width}x{height}','horizontal_overflow':has_horizontal,
                            'title_visible':dims['visibleTitle'],'screenshot':str(screenshot)})
