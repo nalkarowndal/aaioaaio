@@ -70,6 +70,13 @@ def main():
                         {'name':'qa_alpha.txt','mimeType':'text/plain','buffer':b'alpha'},
                         {'name':'qa_beta.txt','mimeType':'text/plain','buffer':b'beta'},
                     ])
+                    # Upload processing is asynchronous. Pressing Enter too early
+                    # intermittently posts text without its file attachments.
+                    # Require both native-composer previews before submitting.
+                    for filename in ('qa_alpha.txt', 'qa_beta.txt'):
+                        page.locator('[data-testid="stChatInput"]').get_by_text(
+                            filename, exact=False
+                        ).first.wait_for(state='visible', timeout=20000)
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
