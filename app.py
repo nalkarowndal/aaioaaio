@@ -12,7 +12,7 @@ from openai import OpenAI, APITimeoutError, APIConnectionError, AuthenticationEr
 
 from core.attachments import ALLOWED_TYPES, MAX_UPLOADS, prepare_image, remove_attachment, upload_snapshot
 from core.conversations import ConversationStore
-from core.chat_ops import edit_user_message, regenerate_source, stream_text_chunks
+from core.chat_ops import editable_question_text, edit_user_message, regenerate_source, stream_text_chunks
 from core.markdown_render import render_assistant_markdown
 
 st.set_page_config(page_title='AI Studio', page_icon='✨', layout='wide', initial_sidebar_state='collapsed')
@@ -210,7 +210,7 @@ for message_index, msg in enumerate(st.session_state.chat_history):
                 if msg['role'] == 'user':
                     with st.form('edit_form_' + str(message_index)):
                         edit_text = st.text_area(
-                            '질문 수정', value=msg['content'],
+                            '질문 수정', value=editable_question_text(msg['content']),
                             max_chars=12_000,
                             key=('edit_' + str(st.session_state.active_conversation_id)
                                  + '_' + str(message_index) + '_'
