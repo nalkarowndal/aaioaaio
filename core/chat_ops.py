@@ -8,6 +8,12 @@ MAX_RESPONSE_CHARS = 100_000
 ATTACHMENT_MARKER = "\n\n첨부: "
 
 
+def editable_question_text(content: str) -> str:
+    """Do not seed the editor with stale attachment names from the display."""
+    return content.split(ATTACHMENT_MARKER, 1)[0] if isinstance(content, str) else ""
+
+
+
 def edit_user_message(history: list[dict], index: int, new_text: str) -> list[dict]:
     """Edit a user turn and invalidate all downstream assistant/user turns."""
     if not isinstance(index, int) or index < 0 or index >= len(history):
