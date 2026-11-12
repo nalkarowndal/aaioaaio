@@ -17,11 +17,17 @@
 
 ## 확인 기준
 
-- [ ] GitHub Actions의 pytest·compileall PASS
-- [ ] 375/768/1280/1920px 반응형·가로 넘침 QA PASS
-- [ ] 1280px 기본 chat composer에서 TXT 2개 첨부 후 전송 PASS
-- [ ] 사용자 메시지 보라색 우측 정렬, AI 메시지와 구별 PASS
+- [x] GitHub Actions의 pytest·compileall PASS (27 passed)
+- [x] 375/768/1280/1920px 반응형·가로 넘침 QA PASS (Chromium)
+- [x] 1280px 기본 chat composer에서 TXT 2개 첨부 후 전송 PASS
+- [x] 사용자 메시지 보라색 우측 정렬, AI 메시지와 구별 PASS (자동 스타일 검사)
 - [ ] 첨부 9개 이상/중복/오류 파일 관리 및 이미지 미리보기 수동 확인
 - [ ] 실제 Groq 키 연결 및 Windows/Android 실기기 확인
 
 **주의:** 자동 QA가 PASS하더라도 실제 Groq 계정/Windows/Android 기기 검수는 별도로 구분합니다. 기존 P0–P4 QA 완료 기록은 수정하지 않습니다.
+
+## 자동 검증 결과
+
+- [GitHub Actions #43160878018](https://github.com/nalkarowndal/aaioaaio/actions/runs/43160878018): 2026-11-12, **success**.
+- pytest: **27 passed**. `compileall`, Markdown fixture 브라우저 검사, 네 해상도의 메인 앱 브라우저 검사, 증거 artifact 업로드 모두 success.
+- 실기기/실제 Groq 요청 및 첨부 경계 사례 수동 검증은 PASS로 표시하지 않습니다.
