@@ -35,7 +35,7 @@ jobs:
         run: |
           python -m streamlit run app.py --server.port 8502 --server.headless true > /tmp/app.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://localhost:8502/_stcore/health && break || sleep 1; done
-          python scripts/visual_qa.py --url http://localhost:8502 --history --output docs/screenshots/app
+          python scripts/visual_qa.py --url http://localhost:8502 --history --actions --output docs/screenshots/app
       - name: Upload visual QA evidence
         if: always()
         uses: actions/upload-artifact@v4
