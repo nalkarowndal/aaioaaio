@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--output',default='docs/screenshots')
     parser.add_argument('--fixture',action='store_true')
     parser.add_argument('--history',action='store_true',help='Assert P6 DB reload and conversation restore')
+    parser.add_argument('--actions',action='store_true',help='Assert P7 copy/edit menu and reload')
     opts=parser.parse_args()
     dest=Path(opts.output)
     dest.mkdir(parents=True,exist_ok=True)
@@ -88,6 +89,24 @@ def main():
                 bg=bubble.evaluate('el => getComputedStyle(el).backgroundImage')
                 assert 'linear-gradient' in bg, f'User bubble styling lost: {bg}'
                 page.screenshot(path=str(dest/f'{width}x{height}_interactions.png'),full_page=True)
+                if width==1280 and opts.actions:
+                    # The actions menu is compact and only appears when invoked.
+                    user_message = page.locator('[data-testid="stChatMessage"]').filter(
+                        has_text='UI 회귀 테스트 메시지').first
+                    action_button = user_message.get_by_role('button', name='작업')
+                    action_button.click()
+                    page.get_by_text('질문 수정',exact=True).first.wait_for(
+                        state='visible',timeout=10000)
+                    assert page.locator('pre code').count() > 0, 'Copyable plain text block missing'
+                    page.get_by_role('textbox', name='질문 수정').fill('P7 수정된 질문')
+                    page.get_by_role('button', name='수정 후 다시 질문').click()
+                    page.locator('[data-testid="stChatMessage"]').filter(
+                        has_text='P7 수정된 질문').first.wait_for(state='visible',timeout=15000)
+                    page.reload(wait_until='domcontentloaded',timeout=30000)
+                    page.locator('[data-testid="stChatMessage"]').filter(
+                        has_text='P7 수정된 질문').first.wait_for(state='visible',timeout=30000)
+                    page.screenshot(path=str(dest/'p7_edit_restored.png'),full_page=True)
+
             report.append({'viewport':f'{width}x{height}','horizontal_overflow':has_horizontal,
                            'title_visible':dims['visibleTitle'],'screenshot':str(screenshot)})
             assert not has_horizontal,f'Full-page horizontal scroll at {width}: {dims}'
