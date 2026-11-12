@@ -79,13 +79,14 @@ def main():
                     # The browser preview appears before the file payload is
                     # necessarily acknowledged by the Streamlit websocket.
                     page.wait_for_timeout(1000)
+                    # P5 allows file-only submissions; stage uploads first,
+                    # then send the question in a separate submission.
+                    input_el.locator('[data-testid="stChatInputSubmitButton"]').click()
+                    page.get_by_text('첨부파일 2/8 · 관리', exact=False).first.wait_for(
+                        state='visible', timeout=20000)
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
-                if width==1280:
-                    # Use the same Send button as Streamlit's E2E file-upload tests.
-                    input_el.locator('[data-testid="stChatInputSubmitButton"]').click()
-                else:
-                    chat_editor.press('Enter')
+                chat_editor.press('Enter')
                 page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(state='visible',timeout=15000)
                 if width==1280 and opts.history:
                     # A full browser reload resets Streamlit session state.
