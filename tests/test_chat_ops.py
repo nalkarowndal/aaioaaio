@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.chat_ops import edit_user_message, regenerate_source, stream_text_chunks
+from core.chat_ops import editable_question_text, edit_user_message, regenerate_source, stream_text_chunks
 
 
 def _chunk(text=None, *, with_choice=True):
@@ -98,3 +98,11 @@ def test_stream_enforces_max_response_chars():
 def test_stream_ignores_non_text_metadata():
     chunks = [_chunk(123), _chunk(None), _chunk('최종')]
     assert ''.join(stream_text_chunks(chunks)) == '최종'
+
+
+
+def test_question_editor_excludes_stale_attachment_display_suffix():
+    shown = "사진을 설명해 주세요\n\n첨부: old_photo.png (준비됨)"
+    assert editable_question_text(shown) == "사진을 설명해 주세요"
+    assert editable_question_text("일반 질문") == "일반 질문"
+    assert editable_question_text(123) == ""
