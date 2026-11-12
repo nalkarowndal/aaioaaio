@@ -77,6 +77,9 @@ def main():
                         page.locator('[data-testid="stChatInput"]').get_by_text(
                             filename, exact=False
                         ).first.wait_for(state='visible', timeout=20000)
+                    # The browser preview appears before the file payload is
+                    # necessarily acknowledged by the Streamlit websocket.
+                    page.wait_for_timeout(1000)
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
@@ -88,8 +91,22 @@ def main():
                     page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(
                         state='visible',timeout=30000)
                 if width==1280:
-                    page.locator('[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]').filter(has_text='qa_alpha.txt').first.wait_for(state='visible',timeout=15000)
-                    page.locator('[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]').filter(has_text='qa_beta.txt').first.wait_for(state='visible',timeout=15000)
+                    # Diagnose actual chat content rather than only a timeout
+                    # if an uploaded file does not reach the persisted message.
+                    for filename in ('qa_alpha.txt', 'qa_beta.txt'):
+                        try:
+                            page.locator('[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]').filter(
+                                has_text=filename
+                            ).first.wait_for(state='visible',timeout=15000)
+                        except Exception:
+                            visible_text = page.locator(
+                                '[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]'
+                            ).all_inner_texts()
+                            page.screenshot(path=str(dest/'attachment_failure.png'),full_page=True)
+                            raise AssertionError(
+                                f'File {filename!r} missing from chat message. '
+                                f'Actual Markdown text: {visible_text[:8]}'
+                            )
                 user_avatar=page.locator('[data-testid="stChatMessageAvatarUser"]').first
                 user_avatar.wait_for(state='visible',timeout=10000)
                 bubble=user_avatar.locator('xpath=ancestor::*[@data-testid="stChatMessage"][1]')
