@@ -72,12 +72,12 @@ def main():
                 chat_editor=page.locator('[data-testid="stChatInput"] textarea').first
                 chat_editor.fill('UI 회귀 테스트 메시지')
                 chat_editor.press('Enter')
-                page.get_by_text('UI 회귀 테스트 메시지',exact=False).first.wait_for(state='visible',timeout=15000)
+                page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(state='visible',timeout=15000)
                 if width==1280 and opts.history:
                     # A full browser reload resets Streamlit session state.
                     # The previous message must still be present from SQLite.
                     page.reload(wait_until='domcontentloaded',timeout=30000)
-                    page.get_by_text('UI 회귀 테스트 메시지',exact=False).first.wait_for(
+                    page.locator('[data-testid="stChatMessage"]').filter(has_text='UI 회귀 테스트 메시지').first.wait_for(
                         state='visible',timeout=30000)
                 if width==1280:
                     page.get_by_text('qa_alpha.txt',exact=False).first.wait_for(state='visible',timeout=15000)
