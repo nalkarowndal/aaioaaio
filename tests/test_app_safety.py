@@ -19,8 +19,24 @@ def test_no_forced_page_scroll_script():
 
 def test_multi_file_support_and_individual_removal():
     source=APP.read_text(encoding='utf-8')
-    assert 'accept_multiple_files=True' in source
+    assert "accept_file='multiple'" in source
+    assert "max_upload_size=10" in source
+    assert "submission.files" in source
     assert 'remove_attachment(' in source
+    assert 'st.file_uploader(' not in source
+
+
+def test_file_only_submission_stages_attachments_without_model_call():
+    source=APP.read_text(encoding='utf-8')
+    assert 'if not message:\\n        st.rerun()' in repr(source)
+    assert "message = (submission.text or '').strip()" in source
+    assert 'upload_snapshot(' in source
+
+
+def test_attachment_controls_are_collapsed_until_files_exist():
+    source=APP.read_text(encoding='utf-8')
+    assert 'if st.session_state.attachments:' in source
+    assert 'with st.expander(f"첨부파일 {len(st.session_state.attachments)}/{MAX_UPLOADS} · 관리", expanded=False):' in source
 
 
 def test_no_secrets_access_at_import_time():
