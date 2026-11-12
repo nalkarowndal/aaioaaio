@@ -66,3 +66,24 @@ def test_user_avatar_preserves_role_selector_and_status_labels():
     source=APP.read_text(encoding='utf-8')
     assert "if msg['role'] == 'assistant' else None" in source
     assert "'준비됨' if item['status'] == 'ready' else '읽기 실패'" in source
+
+
+def test_p7_streaming_commit_after_completion_only():
+    source = APP.read_text(encoding='utf-8')
+    assert 'stream=True' in source
+    assert 'st.write_stream(stream_text_chunks(stream))' in source
+    assert "if isinstance(reply, str) and reply.strip():" in source
+    assert "new_answer = {'role': 'assistant', 'content': reply.strip()}" in source
+    assert source.index("reply = st.write_stream") < source.index("history.append(new_answer)")
+    assert "persist_chat()  # A sent question is never lost" in source
+
+
+def test_p7_message_actions_no_raw_html_clipboard_workarounds():
+    source = APP.read_text(encoding='utf-8')
+    assert "with st.popover('작업', icon=':material/more_horiz:')" in source
+    assert "st.code(msg['content'], language=None)" in source
+    assert "st.form_submit_button('수정 후 다시 질문')" in source
+    assert "regenerate_source(st.session_state.chat_history, message_index)" in source
+    assert "st.session_state.attachments = {}" in source
+    assert "navigator.clipboard" not in source
+    assert "unsafe_allow_html=True" in source  # Existing static CSS and header only.
