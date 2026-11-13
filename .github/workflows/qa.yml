@@ -37,6 +37,19 @@ jobs:
           python -m streamlit run app.py --server.port 8502 --server.headless true > /tmp/app.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://localhost:8502/_stcore/health && break || sleep 1; done
           python scripts/visual_qa.py --url http://localhost:8502 --history --actions --output docs/screenshots/app
+      - name: Issue #6 repeated attachment + SQLite QA (5 iterations, 2 modes)
+        run: |
+          python scripts/issue6_stress_qa.py \
+            --url http://localhost:8502 \
+            --db /tmp/ai-studio-p6-history-qa.sqlite3 \
+            --iterations 5 \
+            --output docs/screenshots/issue6
+      - name: Issue #6 safe server diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f /tmp/app.log ]; then
+            grep '\[QA_DEBUG\]' /tmp/app.log | tail -n 100 || true
+          fi
       - name: Upload visual QA evidence
         if: always()
         uses: actions/upload-artifact@v4
