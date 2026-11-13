@@ -44,7 +44,10 @@ def assert_saved(db_path: Path, question: str, filenames: list[str]) -> None:
 def run_trial(browser, url: str, db_path: Path, iteration: int, mode: str, output: Path) -> dict:
     label = f"issue6-{iteration:02d}-{mode}"
     question = f"Issue #6 upload regression {label}"
-    filenames = [f"{label}-alpha.txt", f"{label}-beta.txt"]
+    # Streamlit file chips visually abbreviate long names. Use compact unique
+    # fixture names so the chip's visible label is unambiguous on Chromium.
+    token = f"i6{iteration:02d}{'s' if mode == 'staged' else 'c'}"
+    filenames = [f"{token}a.txt", f"{token}b.txt"]
     record = {"iteration": iteration, "mode": mode, "files": filenames}
     started = time.monotonic()
     context = browser.new_context(viewport={"width": 1280, "height": 800})
@@ -114,6 +117,12 @@ def run_trial(browser, url: str, db_path: Path, iteration: int, mode: str, outpu
     except Exception as exc:
         record["status"] = "fail"
         record["error"] = f"{type(exc).__name__}: {str(exc)[:450]}"
+        try:
+            record["composer_preview"] = page.locator(
+                '[data-testid="stChatInput"]'
+            ).all_inner_texts()[:2]
+        except Exception:
+            pass
         try:
             page.screenshot(path=str(output / (label + "_failure.png")), full_page=True)
         except Exception:
